@@ -1,0 +1,42 @@
+ecg-project/
+├── hardware/
+│   ├── ecg_sender/
+│   │   └── ecg_sender.ino          # ESP8266 → FastAPI backend
+│   └── ecg_display_uno/
+│       └── ecg_display_uno.ino     # UNO + TFT, standalone (অপরিবর্তিত থাকবে)
+│
+├── backend/
+│   ├── app/
+│   │   ├── main.py                 # FastAPI app entrypoint
+│   │   ├── config.py                # env-based settings
+│   │   ├── database.py             # SQLite engine/session
+│   │   ├── models.py               # SQLAlchemy models
+│   │   ├── schemas.py               # Pydantic request/response schemas
+│   │   ├── routes/
+│   │   │   ├── ingest.py           # POST /api/data  (ESP8266 → এখানে)
+│   │   │   ├── readings.py         # GET endpoints + WebSocket
+│   │   │   ├── analysis.py         # AI signal analysis
+│   │   │   └── chat.py             # AI chatbot
+│   │   ├── services/
+│   │   │   ├── signal_processing.py # BPM/peak detection
+│   │   │   └── ai_client.py         # OpenRouter wrapper
+│   │   └── ws_manager.py            # WebSocket broadcast manager
+│   ├── requirements.txt
+│   ├── .env.example
+│   └── ecg.db                       # SQLite (auto-created, git-ignored)
+│
+├── frontend/
+    ├── app/
+    │   ├── layout.tsx
+    │   ├── page.tsx              # main dashboard (2-panel layout)
+    │   └── globals.css
+    ├── components/
+    │   ├── EcgMonitor.tsx        # canvas-based sweep plot
+    │   ├── AnalysisPanel.tsx     # BPM + AI summary
+    │   └── ChatPanel.tsx         # chatbot UI
+    ├── lib/
+    │   ├── useEcgSocket.ts       # WebSocket hook
+    │   └── api.ts                # backend fetch helpers
+    └── .env.local
+│
+└── .gitignore

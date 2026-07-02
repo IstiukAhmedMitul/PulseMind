@@ -1,1 +1,22 @@
-*venv
+# --- Secrets ---
+backend/.env
+hardware/ecg_sender/secrets.h
+
+# --- Python ---
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# --- Database ---
+backend/ecg.db
+backend/*.db
+
+# --- Node / Next.js (পরের ধাপে লাগবে) ---
+frontend/node_modules/
+frontend/.next/
+frontend/.env.local
+
+# --- OS/editor ---
+.DS_Store
+.vscode/
