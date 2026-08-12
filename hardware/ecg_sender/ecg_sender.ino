@@ -1,38 +1,35 @@
 /*
-  ecg_sender.ino
+  ecg_sender.ino — FINAL VERSION
   ------------------------------------------------------------
   ESP8266 (NodeMCU) — AD8232 থেকে ECG ভ্যালু পড়ে, WiFi দিয়ে
   FastAPI backend এর /api/data endpoint এ ব্যাচ আকারে পাঠায়।
 
-  Wiring (আগে থেকেই কনফার্ম করা):
+  Wiring:
     AD8232 OUTPUT -> A0
     AD8232 3.3V   -> ESP8266 3.3V
     AD8232 GND    -> ESP8266 GND
-    (LO+, LO- এই ভার্সনে ব্যবহার করা হয়নি)
+    AD8232 SDN    -> ESP8266 D7 (GPIO13)  [শুধু HIGH রাখার জন্য, shutdown glitch এড়াতে]
 
-  আগের ভার্সন থেকে পরিবর্তন:
-    - WiFi/server credentials আলাদা secrets.h ফাইলে সরানো হয়েছে
-    - ব্যাচ সাইজ কমানো হয়েছে (৫০ -> ১৫) latency কমানোর জন্য
-    - JSON build করার জন্য String concatenation বাদ দিয়ে
-      snprintf ব্যবহার করা হয়েছে (মেমরি ফ্র্যাগমেন্টেশন এড়াতে)
-    - Non-blocking reconnect logic
+  LO+/LO- এই ভার্সনে ইচ্ছাকৃতভাবে ব্যবহার করা হয়নি — extensive
+  troubleshooting এ দেখা গেছে এই বোর্ডে LO+/LO- reading বোর্ডের
+  নিজস্ব LED indicator এর সাথে না মেলা, তাই এটাকে অবিশ্বাস্য ধরা হয়েছে।
+  শুধু OUTPUT সিগন্যাল ব্যবহার করা হচ্ছে, যেটা ভালো electrode contact এ
+  নির্ভরযোগ্যভাবে কাজ করতে দেখা গেছে।
 */
 
 #include <ESP8266WiFi.h>
 #include <ESP8266HTTPClient.h>
-#include "secrets.h"   // WIFI_SSID, WIFI_PASSWORD, SERVER_IP, SERVER_PORT — এখানে ডিফাইন করা
+#include "secrets.h"   // WIFI_SSID, WIFI_PASSWORD, SERVER_IP, SERVER_PORT
 
 // ---------- Sensor config ----------
-#define SENSORPIN A0            // AD8232 OUTPUT pin
-#define SAMPLES_PER_BATCH 15     // কম রাখা হয়েছে latency কমানোর জন্য (আগে ছিল 50)
-#define SAMPLE_DELAY_MS   8      // ~125Hz sample rate (আগে ছিল 10ms/100Hz)
+#define SENSORPIN A0
+#define SDN_PIN   D7        // GPIO13 — shutdown pin, always HIGH রাখা হচ্ছে
+#define SAMPLES_PER_BATCH 15
+#define SAMPLE_DELAY_MS   8   // ~125Hz sample rate
 
 // ---------- Endpoint ----------
 const char* SERVER_PATH = "/api/data";
 
-WiFiClient wifiClient;
-
-// ব্যাচ ডেটা বাফার
 struct Reading {
   unsigned long millisTs;
   int value;
@@ -48,7 +45,6 @@ void connectWiFi() {
   while (WiFi.status() != WL_CONNECTED) {
     delay(400);
     Serial.print(".");
-    // ১৫ সেকেন্ডের বেশি চেষ্টা করলে থেমে আবার শুরু থেকে ট্রাই করবে (loop এ ফিরে)
     if (millis() - startAttempt > 15000) {
       Serial.println("\nWiFi connect timeout, retrying...");
       WiFi.disconnect();
@@ -62,11 +58,9 @@ void connectWiFi() {
   Serial.println(WiFi.localIP());
 }
 
-// ব্যাচকে JSON স্ট্রিং এ বানায় (String concatenation এর বদলে snprintf, মেমরি সেফ)
 void buildPayload(char* out, size_t outSize) {
   size_t offset = 0;
   offset += snprintf(out + offset, outSize - offset, "{\"readings\":[");
-
   for (int i = 0; i < SAMPLES_PER_BATCH; i++) {
     offset += snprintf(out + offset, outSize - offset,
                         "{\"value\":%d,\"millis\":%lu}%s",
@@ -77,7 +71,6 @@ void buildPayload(char* out, size_t outSize) {
 }
 
 void sendBatch() {
-  // JSON payload সাইজ: প্রতিটা readings entry মোটামুটি ২৫-৩০ বাইট, ১৫টার জন্য বাফার যথেষ্ট বড় রাখা হলো
   static char payload[900];
   buildPayload(payload, sizeof(payload));
 
@@ -89,10 +82,9 @@ void sendBatch() {
 
   http.begin(client, url);
   http.addHeader("Content-Type", "application/json");
-  http.setTimeout(3000); // 3s timeout, যাতে slow/dead server লুপ আটকে না রাখে
+  http.setTimeout(3000);
 
   int httpCode = http.POST(payload);
-
   if (httpCode > 0) {
     Serial.printf("Sent batch -> HTTP %d\n", httpCode);
   } else {
@@ -104,6 +96,10 @@ void sendBatch() {
 void setup() {
   Serial.begin(115200);
   pinMode(SENSORPIN, INPUT);
+
+  pinMode(SDN_PIN, OUTPUT);
+  digitalWrite(SDN_PIN, HIGH);  // চিপকে সবসময় active mode এ রাখা
+
   connectWiFi();
 }
 
@@ -113,7 +109,6 @@ void loop() {
     connectWiFi();
   }
 
-  // ব্যাচ সংগ্রহ
   for (int i = 0; i < SAMPLES_PER_BATCH; i++) {
     batch[i].value = analogRead(SENSORPIN);
     batch[i].millisTs = millis();
@@ -121,5 +116,4 @@ void loop() {
   }
 
   sendBatch();
-  // এখানে ইচ্ছাকৃতভাবে অতিরিক্ত delay নেই — পরের ব্যাচ সংগ্রহ সাথে সাথে শুরু হবে
 }

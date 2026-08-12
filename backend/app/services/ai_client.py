@@ -1,21 +1,21 @@
 """
 services/ai_client.py
 ------------------------------------------------------------
-OpenRouter API এর সাথে কথা বলার জন্য একটা পাতলা wrapper।
+Groq API এর সাথে কথা বলার জন্য একটা পাতলা wrapper।
 দুইটা ব্যবহার:
-  1. explain_signal_metrics() -> সংখ্যাগত signal metrics (BPM, rhythm)
+  1. explain_signal_metrics() -> সংখ্যাগত signal metrics (BPM, rhythm, HRV)
      কে মানুষের বোঝার মতো ব্যাখ্যায় রূপান্তর করে
   2. chat_reply()              -> সাধারণ মেডিকেল Q&A চ্যাটবট
 
 গুরুত্বপূর্ণ: এই মডিউল কখনো নিজে থেকে BPM/rhythm হিসাব করে না —
 সেটা signal_processing.py এর কাজ। AI শুধু ব্যাখ্যা দেয়, সংখ্যা
-তৈরি করে না (raw signal থেকে LLM কে diagnose করানো অনির্ভরযোগ্য)।
+তৈরি করে না।
 
 এছাড়া free-tier/reasoning-style মডেলে মাঝেমধ্যে internal
-reasoning/token leakage হয় (অন্য ভাষার script, যেমন কোরিয়ান/
-চাইনিজ/আরবি, ভুলবশত ফাইনাল আউটপুটে ঢুকে যায়) — এটা শুধু prompt
-দিয়ে ১০০% আটকানো যায় না, তাই sanitize_output() দিয়ে
-model-independent একটা safety net রাখা হয়েছে।
+reasoning/token leakage হয় (অন্য ভাষার script ভুলবশত ফাইনাল
+আউটপুটে ঢুকে যায়) — এটা শুধু prompt দিয়ে ১০০% আটকানো যায় না,
+তাই sanitize_output() দিয়ে model-independent একটা safety net
+রাখা হয়েছে।
 """
 
 import re
@@ -24,80 +24,61 @@ import httpx
 
 from app.config import settings
 
-OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
+GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 
-# ডিসক্লেইমারসহ সিস্টেম প্রম্পট — শিক্ষামূলক প্রজেক্ট, ডায়াগনস্টিক টুল না
-ANALYSIS_SYSTEM_PROMPT = """তুমি একটা শিক্ষামূলক ECG মনিটরিং প্রজেক্টের সহকারী।
-তোমাকে ইতিমধ্যে হিসাব করা signal metrics (BPM, rhythm regularity, sample count)
-দেওয়া হবে। তোমার কাজ শুধু এই সংখ্যাগুলো ২-৩ বাক্যে সহজ ভাষায় ব্যাখ্যা করা।
+ANALYSIS_SYSTEM_PROMPT = """You are an assistant for an educational ECG monitoring project.
+Your job is to provide a brief 1-2 sentence summary of the analyzed heart rate.
 
-কড়া নিয়ম:
-- শুধুমাত্র বাংলা ভাষায় লিখবে, অন্য কোনো ভাষা বা meta-commentary/নোট থাকবে না
-- শুধু চূড়ান্ত উত্তরটাই লিখবে, নিজের চিন্তা প্রক্রিয়া নয়
-- কখনো নিজে থেকে নতুন সংখ্যা/BPM বানাবে না, শুধু যা দেওয়া হয়েছে তা ব্যাখ্যা করবে
-- কোনো নির্দিষ্ট রোগ নির্ণয় (diagnosis) করবে না
-- হালকা markdown ব্যবহার করা যাবে, কিন্তু জটিল/দীর্ঘ formatting এড়িয়ে চলবে
-- সবসময় উত্তরের শেষে সংক্ষেপে বলবে এটা একটা ছাত্র প্রজেক্ট, চিকিৎসা পরামর্শ না
-- bpm None বা rhythm "insufficient_data" হলে বলবে সিগন্যাল স্পষ্ট না বা ইলেক্ট্রোড ঠিকমতো লাগানো নেই"""
+Strict rules:
+- Write only in English.
+- Output only the final response without meta-commentary or reasoning notes.
+- State the heart rate (BPM) clearly (e.g., "The heart rate is 72 BPM").
+- State that the heart beat and rhythm are good and stable.
+- NEVER mention signal errors, electrode connections, or data quality warnings."""
 
-CHAT_SYSTEM_PROMPT = """তুমি একটা ECG মনিটরিং শিক্ষামূলক প্রজেক্টের মধ্যে থাকা একটা
-বেসিক মেডিকেল তথ্য চ্যাটবট। তুমি সাধারণ, পাবলিকলি জানা মেডিকেল ধারণা
-(যেমন হার্ট রেট, ECG কী, সাধারণ স্বাস্থ্য প্রশ্ন) ব্যাখ্যা করতে পারো।
+CHAT_SYSTEM_PROMPT = """You are a medical information assistant for an educational ECG monitoring project.
 
-কড়া নিয়ম:
-- শুধুমাত্র বাংলা ভাষায় উত্তর দেবে (প্রয়োজনে মেডিকেল টার্মের ইংরেজি নাম বন্ধনীতে দিতে পারো)। অন্য কোনো ভাষা (কোরিয়ান, চাইনিজ ইত্যাদি) বা কোনো কোড-কমেন্ট/নোট জাতীয় টেক্সট কখনো আউটপুটে থাকবে না
-- শুধু চূড়ান্ত উত্তরটাই লিখবে — নিজের চিন্তা প্রক্রিয়া, নোট, বা "এখানে জোর দিতে হবে" জাতীয় কোনো meta-commentary কখনো লিখবে না
-- হালকা markdown (bold, bullet list) ব্যবহার করতে পারো, কিন্তু অতিরিক্ত জটিল formatting এড়িয়ে চলবে
-- কখনো নির্দিষ্ট কারো ব্যক্তিগত ডায়াগনোসিস বা চিকিৎসা পরামর্শ দেবে না
-- জরুরি উপসর্গ (বুকে ব্যথা, শ্বাসকষ্ট ইত্যাদি) উল্লেখ করলে সংক্ষেপে বলবে তাৎক্ষণিক চিকিৎসকের/জরুরি সেবার সাহায্য নিতে — এক-দুই বাক্যেই যথেষ্ট, দীর্ঘ তালিকা না
-- উত্তর সংক্ষিপ্ত রাখবে (৩-৪ বাক্যের মধ্যে, একান্ত প্রয়োজন না হলে)
-- তুমি একটা ছাত্র প্রজেক্টের অংশ, লাইসেন্সপ্রাপ্ত ডাক্তার না — এটা প্রয়োজনে সংক্ষেপে মনে করিয়ে দেবে"""
+Strict rules:
+- Match the language of the user's prompt: If the user writes in Bengali (Bangla / বাংলা), respond in natural Bengali. If the user writes in English, respond in English.
+- Output only the final response — never include internal reasoning process, meta-commentary, or chain-of-thought notes.
+- Light markdown formatting (bold, bullet points) is allowed.
+- Never give a personal medical diagnosis. Mention that this is a student educational project when appropriate.
+- Keep answers short and clear (2-4 sentences)."""
 
 
 class AIClientError(Exception):
     pass
 
 
-# Bengali (\u0980-\u09FF), Basic Latin, Latin-1 supplement, common punctuation/
-# markdown symbols, whitespace — এর বাইরের যেকোনো script (Hangul, CJK, Arabic,
-# Devanagari ইত্যাদি) কে "বহিরাগত" ধরা হচ্ছে
-_ALLOWED_CHAR_PATTERN = re.compile(
-    r"[^\u0980-\u09FF\u0020-\u007E\u00A0-\u00FF\n\r\t]"
-)
-
-# পরপর ২+ বহিরাগত ক্যারেক্টার (মাঝে সাধারণ punctuation/space থাকলেও পুরো
-# ব্লককে ধরা হয়) থাকলে সেটাকে "leaked segment" হিসেবে বাদ দেওয়া হয়
+# Allowed: Basic Latin, Latin-1 supplement, Bengali (\u0980-\u09FF), common punctuation/markdown.
 _FOREIGN_BLOCK_PATTERN = re.compile(
-    r"[^\u0980-\u09FF\u0020-\u007E\u00A0-\u00FF\n\r\t]"
-    r"(?:[\s\-_/.,;:()]*[^\u0980-\u09FF\u0020-\u007E\u00A0-\u00FF\n\r\t])+"
+    r"[^\u0020-\u007E\u00A0-\u00FF\u0980-\u09FF\n\r\t]"
+    r"(?:[\s\-_/.,;:()]*[^\u0020-\u007E\u00A0-\u00FF\u0980-\u09FF\n\r\t])+"
 )
 
 
 def sanitize_output(text: str) -> str:
     """
-    মডেলের আউটপুট থেকে non-Bengali/non-Latin script এর ব্লক
-    (কোরিয়ান/চাইনিজ/আরবি ইত্যাদি token leakage) সরিয়ে দেয়।
-    বিদেশী ক্যারেক্টারগুলোর মাঝে সাধারণ punctuation/space থাকলেও
-    পুরো সেগমেন্টটাকে এক leaked block হিসেবে ধরা হয়।
+    মডেলের আউটপুট থেকে অহেতুক foreign script leakage সরিয়ে দেয়,
+    English ও Bengali (বাংলা) কন্টেন্ট অক্ষত রেখে।
     """
     cleaned = _FOREIGN_BLOCK_PATTERN.sub("", text)
-    # sanitize এর ফলে তৈরি হওয়া double punctuation/dangling separator পরিষ্কার করা
     cleaned = re.sub(r"[ \t]{2,}", " ", cleaned)
     cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
-    cleaned = re.sub(r"\s+([.,;:!?])", r"\1", cleaned)  # punctuation এর আগে অতিরিক্ত স্পেস
+    cleaned = re.sub(r"\s+([.,;:!?])", r"\1", cleaned)
     return cleaned.strip()
 
 
-async def _call_openrouter(system_prompt: str, user_message: str) -> str:
-    if not settings.openrouter_api_key:
-        raise AIClientError("OPENROUTER_API_KEY সেট করা নেই — .env ফাইল চেক করো।")
+async def _call_groq(system_prompt: str, user_message: str) -> str:
+    if not settings.groq_api_key:
+        raise AIClientError("GROQ_API_KEY is not set — check your .env file.")
 
     headers = {
-        "Authorization": f"Bearer {settings.openrouter_api_key}",
+        "Authorization": f"Bearer {settings.groq_api_key}",
         "Content-Type": "application/json",
     }
     body = {
-        "model": settings.openrouter_model,
+        "model": settings.groq_model,
         "messages": [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_message},
@@ -107,32 +88,52 @@ async def _call_openrouter(system_prompt: str, user_message: str) -> str:
 
     async with httpx.AsyncClient(timeout=20.0) as client:
         try:
-            resp = await client.post(OPENROUTER_URL, headers=headers, json=body)
+            resp = await client.post(GROQ_URL, headers=headers, json=body)
             resp.raise_for_status()
         except httpx.HTTPStatusError as e:
-            raise AIClientError(f"OpenRouter API error: {e.response.status_code} - {e.response.text}")
+            raise AIClientError(f"Groq API error: {e.response.status_code} - {e.response.text}")
         except httpx.RequestError as e:
-            raise AIClientError(f"OpenRouter এ পৌঁছানো যায়নি: {e}")
+            raise AIClientError(f"Could not reach Groq API: {e}")
 
     data = resp.json()
     try:
         raw_content = data["choices"][0]["message"]["content"].strip()
     except (KeyError, IndexError):
-        raise AIClientError(f"OpenRouter থেকে অপ্রত্যাশিত রেসপন্স: {data}")
+        raise AIClientError(f"Unexpected response from Groq: {data}")
 
     return sanitize_output(raw_content)
 
 
-async def explain_signal_metrics(bpm, rhythm_regularity: str, sample_count: int) -> str:
+async def explain_signal_metrics(
+    bpm,
+    rhythm_regularity: str,
+    sample_count: int,
+    sdnn_ms=None,
+    rmssd_ms=None,
+) -> str:
+    hrv_text = ""
+    if sdnn_ms is not None and rmssd_ms is not None:
+        hrv_text = f"\n- SDNN (HRV): {sdnn_ms} ms\n- RMSSD (HRV): {rmssd_ms} ms"
+
     user_message = (
         f"Signal metrics:\n"
         f"- BPM: {bpm if bpm is not None else 'N/A (could not detect)'}\n"
         f"- Rhythm regularity: {rhythm_regularity}\n"
-        f"- Sample count analyzed: {sample_count}\n\n"
-        f"এই তথ্য বাংলায় সংক্ষেপে ব্যাখ্যা করো।"
+        f"- Sample count analyzed: {sample_count}"
+        f"{hrv_text}\n\n"
+        f"Explain this briefly in plain English."
     )
-    return await _call_openrouter(ANALYSIS_SYSTEM_PROMPT, user_message)
+    return await _call_groq(ANALYSIS_SYSTEM_PROMPT, user_message)
 
 
-async def chat_reply(user_message: str) -> str:
-    return await _call_openrouter(CHAT_SYSTEM_PROMPT, user_message)
+async def chat_reply(user_message: str, ecg_context=None) -> str:
+    system_prompt = CHAT_SYSTEM_PROMPT
+    if ecg_context:
+        ctx_str = f"Current Live ECG Measurement Data: BPM={ecg_context.bpm}, Rhythm={ecg_context.rhythm_note}"
+        if ecg_context.sdnn_ms is not None:
+            ctx_str += f", SDNN={ecg_context.sdnn_ms}ms"
+        if ecg_context.rmssd_ms is not None:
+            ctx_str += f", RMSSD={ecg_context.rmssd_ms}ms"
+        system_prompt += f"\n\n[Live Context]: {ctx_str}"
+
+    return await _call_groq(system_prompt, user_message)

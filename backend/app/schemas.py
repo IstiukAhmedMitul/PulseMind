@@ -2,8 +2,6 @@
 schemas.py
 ------------------------------------------------------------
 Pydantic মডেল — request body validation ও response shape এর জন্য।
-এগুলো ORM মডেল (models.py) থেকে আলাদা রাখা হয়েছে ইচ্ছাকৃতভাবে,
-যাতে API contract আর DB schema independently বদলানো যায়।
 """
 
 from datetime import datetime
@@ -37,7 +35,16 @@ class ReadingOut(BaseModel):
     value: int
 
     class Config:
-        from_attributes = True  # SQLAlchemy অবজেক্ট থেকে সরাসরি কনভার্ট করার জন্য
+        from_attributes = True
+
+
+# ---------- Pattern flags ----------
+
+class FlagOut(BaseModel):
+    code: str
+    label: str
+    description: str
+    severity: str
 
 
 # ---------- AI Analysis ----------
@@ -47,13 +54,61 @@ class AnalysisResponse(BaseModel):
     rhythm_note: str
     ai_summary: str
     sample_count: int
+    sdnn_ms: Optional[float] = None
+    rmssd_ms: Optional[float] = None
+    flags: List[FlagOut] = []
+
+
+class AnalysisHistoryPoint(BaseModel):
+    id: int
+    created_at: datetime
+    bpm: Optional[float] = None
+    sdnn_ms: Optional[float] = None
+    rmssd_ms: Optional[float] = None
+    rhythm_regularity: str
+
+    class Config:
+        from_attributes = True
 
 
 # ---------- Chatbot ----------
 
+class EcgContext(BaseModel):
+    bpm: Optional[float] = None
+    rhythm_note: Optional[str] = None
+    sdnn_ms: Optional[float] = None
+    rmssd_ms: Optional[float] = None
+
+
 class ChatRequest(BaseModel):
     message: str
+    ecg_context: Optional[EcgContext] = None
 
 
 class ChatResponse(BaseModel):
     reply: str
+
+
+# ---------- Shared Reports ----------
+
+class ShareReportCreate(BaseModel):
+    bpm: Optional[float] = None
+    sdnn_ms: Optional[float] = None
+    rmssd_ms: Optional[float] = None
+    rhythm_note: Optional[str] = None
+    ai_summary: Optional[str] = None
+    sample_count: int = 500
+
+
+class ShareReportOut(BaseModel):
+    id: str
+    created_at: datetime
+    bpm: Optional[float] = None
+    sdnn_ms: Optional[float] = None
+    rmssd_ms: Optional[float] = None
+    rhythm_note: Optional[str] = None
+    ai_summary: Optional[str] = None
+    sample_count: int = 500
+
+    class Config:
+        from_attributes = True

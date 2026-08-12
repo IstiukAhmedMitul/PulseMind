@@ -1,11 +1,3 @@
-"""
-routes/ingest.py
-------------------------------------------------------------
-ESP8266 এখানে POST করে ব্যাচ readings পাঠায়।
-প্রতিটা reading SQLite এ সেভ হয়, এবং WebSocket দিয়ে
-frontend এ লাইভ push করা হয়।
-"""
-
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
@@ -28,8 +20,6 @@ async def receive_data(payload: IngestPayload, db: Session = Depends(get_db)):
     db.add_all(db_objects)
     db.commit()
 
-    # DB commit এর পর id/received_at auto-generate হয়ে যায়, তাই refresh
-    # করে সেই ভ্যালুগুলো নিয়ে broadcast payload বানানো হচ্ছে
     for obj in db_objects:
         db.refresh(obj)
 

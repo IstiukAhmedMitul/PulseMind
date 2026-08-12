@@ -22,30 +22,62 @@ class Reading(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     received_at = Column(DateTime, default=utc_now, index=True)
-    esp_millis = Column(Integer)         # ESP8266 এর millis() টাইমস্ট্যাম্প (device-local)
-    value = Column(Integer)              # raw ADC ভ্যালু (0-1023)
+    esp_millis = Column(Integer)
+    value = Column(Integer)
     session_id = Column(Integer, ForeignKey("sessions.id"), nullable=True)
 
     session = relationship("MeasurementSession", back_populates="readings")
 
 
 class MeasurementSession(Base):
-    """একটা measurement সেশন (device চালু থেকে বন্ধ পর্যন্ত, বা ম্যানুয়াল সেশন)।"""
+    """একটা measurement সেশন (device চালু থেকে বন্ধ পর্যন্ত)।"""
     __tablename__ = "sessions"
 
     id = Column(Integer, primary_key=True, index=True)
     started_at = Column(DateTime, default=utc_now)
     ended_at = Column(DateTime, nullable=True)
-    label = Column(String, nullable=True)   # যেমন "Test 1", "Patient A" ইত্যাদি
+    label = Column(String, nullable=True)
 
     readings = relationship("Reading", back_populates="session")
 
 
 class ChatMessage(Base):
-    """চ্যাটবট কথোপকথনের লগ (ঐচ্ছিক, পরে ব্যবহার হবে)।"""
+    """চ্যাটবট কথোপকথনের লগ।"""
     __tablename__ = "chat_history"
 
     id = Column(Integer, primary_key=True, index=True)
     created_at = Column(DateTime, default=utc_now)
-    role = Column(String)         # "user" বা "assistant"
+    role = Column(String)
     content = Column(Text)
+
+
+class AnalysisRecord(Base):
+    """
+    প্রতিবার AI analysis চালানো হলে (Analyze বাটনে ক্লিক), তার ফলাফল
+    এখানে সংরক্ষিত হয় — এটাই historical trend graph এর ডেটা সোর্স।
+    """
+    __tablename__ = "analysis_records"
+
+    id = Column(Integer, primary_key=True, index=True)
+    created_at = Column(DateTime, default=utc_now, index=True)
+    bpm = Column(Float, nullable=True)
+    sdnn_ms = Column(Float, nullable=True)
+    rmssd_ms = Column(Float, nullable=True)
+    rhythm_regularity = Column(String)
+    sample_count = Column(Integer)
+
+
+class SharedReport(Base):
+    """
+    পাবলিক শেয়ারযোগ্য ECG রিপোর্ট স্ন্যাপশট।
+    """
+    __tablename__ = "shared_reports"
+
+    id = Column(String, primary_key=True, index=True)  # unique string code e.g. report_xyz
+    created_at = Column(DateTime, default=utc_now)
+    bpm = Column(Float, nullable=True)
+    sdnn_ms = Column(Float, nullable=True)
+    rmssd_ms = Column(Float, nullable=True)
+    rhythm_note = Column(String, nullable=True)
+    ai_summary = Column(Text, nullable=True)
+    sample_count = Column(Integer, default=500)
