@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Sparkles } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { fetchAnalysis, shareReport, type AnalysisResponse } from "@/lib/api";
 import { useLanguage } from "@/lib/LanguageContext";
@@ -60,7 +61,7 @@ export default function AnalysisPanel() {
       <div className="card-body p-4">
         <div className="flex items-center justify-between">
           <h2 className="card-title text-base text-emerald-400 font-bold flex items-center gap-2">
-            <span>✨</span> {t("aiAnalysisTitle")}
+            <Sparkles className="w-4 h-4" /> {t("aiAnalysisTitle")}
           </h2>
           <div className="flex items-center gap-2">
             {analysis && (

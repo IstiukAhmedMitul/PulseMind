@@ -2,6 +2,7 @@
 
 import { useEffect, useState, use } from "react";
 import Link from "next/link";
+import { ArrowLeft, Download } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import Navbar from "@/components/Navbar";
 import { fetchSharedReport, type SharedReportData } from "@/lib/api";
@@ -28,15 +29,15 @@ export default function SharedReportPage({ params }: { params: Promise<{ id: str
 
       <main className="flex-1 max-w-4xl w-full mx-auto p-4 sm:p-6 space-y-6">
         <div className="flex items-center justify-between">
-          <Link href="/" className="btn btn-ghost btn-sm text-emerald-400">
-            ← {t("backToDashboard")}
+          <Link href="/" className="btn btn-ghost btn-sm text-emerald-400 gap-1">
+            <ArrowLeft className="w-4 h-4" /> {t("backToDashboard")}
           </Link>
           {report && (
             <button
               onClick={() => generatePdfReport("share-report-printable", `ECG_Report_${report.id}.pdf`)}
-              className="btn btn-emerald btn-sm bg-emerald-600 text-white"
+              className="btn btn-emerald btn-sm bg-emerald-600 text-white gap-1"
             >
-              📥 {t("exportPdf")}
+              <Download className="w-4 h-4" /> {t("exportPdf")}
             </button>
           )}
         </div>

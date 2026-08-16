@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import { Bot, Check } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { sendChatMessage, fetchAnalysis, type AnalysisResponse } from "@/lib/api";
 import { useLanguage } from "@/lib/LanguageContext";
@@ -73,11 +74,11 @@ export default function ChatPanel() {
     <div className="flex flex-col h-full min-h-0 bg-base-200/60 backdrop-blur-md rounded-xl overflow-hidden border border-base-300 shadow-md">
       <div className="p-3 border-b border-base-300 flex items-center justify-between bg-base-300/30 flex-shrink-0">
         <h2 className="font-bold text-sm text-emerald-400 flex items-center gap-2">
-          <span>🤖</span> {t("chatTitle")}
+          <Bot className="w-4 h-4" /> {t("chatTitle")}
         </h2>
         {liveContext && (
-          <span className="badge badge-emerald badge-xs py-1 px-2 text-[10px] bg-emerald-500/20 text-emerald-300 border-emerald-500/30">
-            ✓ {t("liveContextBadge")}
+          <span className="badge badge-emerald badge-xs py-1 px-2 text-[10px] bg-emerald-500/20 text-emerald-300 border-emerald-500/30 flex items-center gap-1">
+            <Check className="w-3 h-3" /> {t("liveContextBadge")}
           </span>
         )}
       </div>

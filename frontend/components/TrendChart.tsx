@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import { TrendingUp } from "lucide-react";
 import {
   LineChart,
   Line,
@@ -58,7 +59,7 @@ export default function TrendChart() {
       <div className="card-body p-4">
         <div className="flex items-center justify-between flex-wrap gap-2">
           <h2 className="card-title text-base text-emerald-400 font-bold flex items-center gap-2">
-            <span>📈</span> Heart Rate Trend
+            <TrendingUp className="w-4 h-4" /> Heart Rate Trend
           </h2>
           <div className="join border border-emerald-500/20 rounded-lg p-0.5 bg-base-300/40">
             {RANGE_OPTIONS.map((opt) => (
