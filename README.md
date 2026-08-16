@@ -11,16 +11,16 @@ This project is explicitly **not a medical diagnostic system**. The analysis and
 ## Figures
 
 Figure 1. Block diagram of the proposed IoT-based ECG monitoring system
-![Figure 1. Block diagram of the proposed IoT-based ECG monitoring system](https://raw.githubusercontent.com/najibulazam/PulseMind-ECG-Monitoring-System/refs/heads/main/figures/Figure%204.%20Block%20diagram%20of%20the%20proposed%20IoT-based%20ECG%20monitoring%20system.png)
+![Figure 1. Block diagram of the proposed IoT-based ECG monitoring system](figures/Figure%204.%20Block%20diagram%20of%20the%20proposed%20IoT-based%20ECG%20monitoring%20system.png)
 
 Figure 2. Hardware implementation of the ECG monitoring system using ESP32 and AD8232
-![Figure 2. Hardware implementation of the ECG monitoring system using ESP32 and AD8232](https://raw.githubusercontent.com/najibulazam/PulseMind-ECG-Monitoring-System/460cb80991b9be4d5c1512f3135c1cb8eaf4ae1c/figures/Figure%201.%20Hardware%20implementation%20of%20the%20ECG%20monitoring%20system%20using%20ESP32%20and%20AD8232..png)
+![Figure 2. Hardware implementation of the ECG monitoring system using ESP32 and AD8232](figures/Figure%201.%20Hardware%20implementation%20of%20the%20ECG%20monitoring%20system%20using%20ESP32%20and%20AD8232..png)
 
 Figure 3. Three-electrode placement used for ECG signal acquisition
-![Figure 3. Three-electrode placement used for ECG signal acquisition](https://raw.githubusercontent.com/najibulazam/PulseMind-ECG-Monitoring-System/refs/heads/main/figures/Figure%202.%20Three-electrode%20placement%20used%20for%20ECG%20signal%20acquisition..png)
+![Figure 3. Three-electrode placement used for ECG signal acquisition](figures/Figure%202.%20Three-electrode%20placement%20used%20for%20ECG%20signal%20acquisition..png)
 
 Figure 4. Real-time ECG monitoring interface displaying ECG waveform and heart rate analysis with chat
-![Figure 4. Real-time ECG monitoring interface displaying ECG waveform and heart rate analysis with chat](https://raw.githubusercontent.com/najibulazam/PulseMind-ECG-Monitoring-System/refs/heads/main/figures/Figure%203.%20Real-time%20ECG%20monitoring%20interface%20displaying%20ECG%20waveform%20and%20heart%20rate%20analysis.%20with%20chat.png)
+![Figure 4. Real-time ECG monitoring interface displaying ECG waveform and heart rate analysis with chat](figures/Figure%203.%20Real-time%20ECG%20monitoring%20interface%20displaying%20ECG%20waveform%20and%20heart%20rate%20analysis.%20with%20chat.png)
 
 ## Key Features
 
@@ -31,6 +31,8 @@ Figure 4. Real-time ECG monitoring interface displaying ECG waveform and heart r
 - Shareable public report snapshots + printable/PDF export
 - Educational page (ECG basics + HRV + wiring)
 - Bilingual UI: English / Bengali
+- Fully responsive dashboard: side-by-side layout on desktop; on mobile the ECG monitor, AI analysis, and trend chart stack vertically while the chat assistant collapses into a floating action button that opens a bottom-sheet drawer
+- Clean, icon-based UI built with [lucide-react](https://lucide.dev/) (no emoji)
 
 ## System Architecture (data flow)
 
@@ -41,7 +43,7 @@ Figure 4. Real-time ECG monitoring interface displaying ECG waveform and heart r
 
 ## Tech Stack
 
-- Frontend: Next.js (App Router), React, TypeScript, Tailwind CSS, daisyUI, Recharts, react-markdown
+- Frontend: Next.js (App Router), React 19, TypeScript, Tailwind CSS v4, daisyUI, Recharts, react-markdown, lucide-react, html2canvas + jsPDF (PDF export)
 - Backend: FastAPI, SQLAlchemy, Pydantic, SQLite, numpy, scipy, websockets, httpx
 - Hardware: ESP32/ESP8266/NodeMCU + AD8232 ECG sensor module
 
@@ -68,6 +70,7 @@ hardware/
 
 ## API Endpoints (backend)
 
+- `GET /health` service health check
 - `POST /api/data` ingest a batch of ECG readings
 - `GET /api/readings/latest?limit=...` fetch recent samples
 - `GET /ws/ecg` WebSocket stream for live ECG updates
